@@ -1,0 +1,60 @@
+
+from confluent_kafka import Consumer, KafkaError
+import mysql.connector
+import ssl
+
+# Kafka consumer configuration with SSL
+conf = {
+    'bootstrap.servers': 'localhost:9093',  # Kafka broker address
+    'group.id': 'my_consumer_group',        # Consumer group ID
+    'auto.offset.reset': 'earliest',        # Start consuming from the earliest message
+    'security.protocol': 'ssl',             # Use SSL for communication
+    'ssl.ca.location': '/path/to/ca.crt',   # CA certificate file location
+    'ssl.cert.location': '/path/to/client.crt',  # Client certificate file location
+    'ssl.key.location': '/path/to/client.key',    # Client private key file location
+}
+
+# MySQL database configuration
+db_config = {
+    'host': 'localhost',
+    'user': 'your_username',
+    'password': 'your_password',
+    'database': 'your_database'
+}
+
+# Create Kafka consumer
+consumer = Consumer(conf)
+
+# Subscribe to a Kafka topic
+consumer.subscribe(['my_topic'])
+
+# Create MySQL connection
+conn = mysql.connector.connect(**db_config)
+cursor = conn.cursor()
+
+# Consume messages and store in MySQL
+try:
+    while True:
+        msg = consumer.poll(timeout=1.0)  # Poll for new messages with a timeout
+        if msg is None:
+            continue
+        if msg.error():
+            if msg.error().code() == KafkaError._PARTITION_EOF:
+                # End of partition, the consumer reached the end of the topic
+                continue
+            else:
+                # Handle other errors
+                print(msg.error())
+                break
+        # Process the message and store in MySQL
+        message = msg.value().decode('utf-8')
+        # Assuming the message is a string to be stored in a 'messages' table
+        insert_query = "INSERT INTO messages (message) VALUES (%s)"
+        cursor.execute(insert_query, (message,))
+        conn.commit()
+
+except KeyboardInterrupt:
+    # Close connections on keyboard interrupt
+    consumer.close()
+    cursor.close()
+    conn.close()
