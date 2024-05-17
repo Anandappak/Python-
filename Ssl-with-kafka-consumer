@@ -1,0 +1,64 @@
+kafka python 
+Convert JKS to PEM: Kafka with Python (using confluent-kafka or kafka-python libraries) requires PEM format for certificates. You need to convert your JKS files to PEM format using the keytool and openssl commands.
+
+Install Required Libraries: Ensure you have the required Python libraries i
+Step 1: Convert JKS to PEM
+First, you need to extract the certificates and keys from the JKS files.
+
+Extract the client certificate and key from client-keystore.jks:
+# Extract private key
+keytool -importkeystore -srckeystore client-keystore.jks -destkeystore client-keystore.p12 -srcstoretype JKS -deststoretype PKCS12 -srcalias <alias> -deststorepass changeit -destkeypass changeit -srckeypass <password>
+
+# Convert to PEM format
+openssl pkcs12 -in client-keystore.p12 -out client-keystore.pem -nodes -passin pass:changeit
+Extract the CA certificate from client-truststore.jks:
+
+# Export the certificate
+keytool -exportcert -keystore client-truststore.jks -alias <alias> -rfc -file client-ca-cert.pem -storepass <password>
+Step 2: Install Required Libraries
+Install confluent-kafka library using pip:
+pip install confluent-kafka
+Step 3: Create a Python Script
+Here’s an example of a Python script to consume messages from a Kafka topic using the confluent-kafka library with SSL configuration.
+
+step 4 : python code
+from confluent_kafka import Consumer, KafkaException
+
+# Kafka consumer configuration
+conf = {
+    'bootstrap.servers': 'your.kafka.server:port',
+    'security.protocol': 'SSL',
+    'ssl.ca.location': 'path/to/client-ca-cert.pem',
+    'ssl.certificate.location': 'path/to/client-keystore.pem',
+    'ssl.key.location': 'path/to/client-keystore.pem',
+    'group.id': 'your-consumer-group',
+    'auto.offset.reset': 'earliest',
+}
+
+# Create Consumer instance
+consumer = Consumer(conf)
+
+# Subscribe to topic
+topic = 'your-topic'
+consumer.subscribe([topic])
+
+# Poll for new messages
+try:
+    while True:
+        msg = consumer.poll(timeout=1.0)
+        if msg is None:
+            continue
+        if msg.error():
+            if msg.error().code() == KafkaException._PARTITION_EOF:
+                print('End of partition reached {0}/{1}'
+                      .format(msg.topic(), msg.partition()))
+            elif msg.error():
+                raise KafkaException(msg.error())
+        else:
+            # Proper message
+            print('Received message: {0}'.format(msg.value().decode('utf-8')))
+except KeyboardInterrupt:
+    pass
+finally:
+    # Close down consumer to commit final offsets.
+    consumer.close()
